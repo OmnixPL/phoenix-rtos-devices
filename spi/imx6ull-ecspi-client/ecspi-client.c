@@ -177,17 +177,17 @@ int main(int argc, char **argv)
     oid_t dir;
     int lookup_tries = 0;
     printf("ecspi-client (ec)\n");
-    printf("KOMPILACJA KLIENTA: 5\n");
+    printf("KOMPILACJA KLIENTA: 6\n");
     while(lookup_tries < 1000)
     {   
-        if (lookup("/dev/ecspi", NULL, &dir) < 0)
+        if (lookup("/dev/spi1", NULL, &dir) < 0)
         {
             printf("ec: lookup failed: %d\n", lookup_tries);
             ++lookup_tries;
         }
         else
         {
-            printf("ec: lookup successful: port: %d\n", dir.port);
+            printf("ec: lookup successful: port: %d, id: %llu\n", dir.port, dir.id);
             break;
         }
     }
@@ -205,6 +205,9 @@ int main(int argc, char **argv)
     writeAsyncTest(dir.port);
     exchangeAsyncTest(dir.port);
     readAsyncTest(dir.port);
+    lookup("/dev/spi2", NULL, &dir);
+    printf("ec: lookup successful: port: %d, id: %llu\n", dir.port, dir.id);
+    chanSelectTest(dir.port);
 
 
     return 0;
