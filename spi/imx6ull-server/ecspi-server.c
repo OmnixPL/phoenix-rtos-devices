@@ -12,12 +12,15 @@
 #define MODULE_NAME "ecspi-server"
 #define LOG_ERROR(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
 #define TRACE(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": trace: " str "\n", ##__VA_ARGS__); } while (0)
+
 #define ID_TO_INDEX(x) (x-1)
 
 #define THREADS_PRIORITY 2
 #define STACKSZ 512
 #define SPI_THREADS_NO 4
+
 #define BURSTSZ 256
+
 #define RETRIES_MAX 10
 
 enum { spi1 = 1, spi2, spi3, spi4 };
@@ -32,7 +35,7 @@ static struct {
 
 static struct {
 	unsigned int ecspi_port;
-	char stack[SPI_THREADS_NO][STACKSZ] __attribute__ ((aligned(8))); /* should be THREADS - 1, but see main */
+	char stack[SPI_THREADS_NO - 1][STACKSZ] __attribute__ ((aligned(8)));
 } ecspisrv_common;
 
 
@@ -68,25 +71,25 @@ static int createDevFiles(void)
 	msg.o.data = NULL;
 	msg.o.size = 0;
 	if (msgSend(dir.port, &msg) < 0 || msg.o.create.err != EOK)
-		return - 1;
+		return -1;
 
 	msg.i.create.dev.id = spi2;
 	msg.i.data = "spi2";
 	msg.i.size = strlen(msg.i.data) + 1;
 	if (msgSend(dir.port, &msg) < 0 || msg.o.create.err != EOK)
-		return - 1;
+		return -1;
 
 	msg.i.create.dev.id = spi3;
 	msg.i.data = "spi3";
 	msg.i.size = strlen(msg.i.data) + 1;
 	if (msgSend(dir.port, &msg) < 0 || msg.o.create.err != EOK)
-		return - 1;
+		return -1;
 
 	msg.i.create.dev.id = spi4;
 	msg.i.data = "spi4";
 	msg.i.size = strlen(msg.i.data) + 1;
 	if (msgSend(dir.port, &msg) < 0 || msg.o.create.err != EOK)
-		return - 1;
+		return -1;
 
 	return 0;
 }
@@ -96,11 +99,12 @@ static int configureDev(msg_t *msg)
 {
 	spi_i_devctl_t *imsg;
 	int id;
+
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
-TRACE("dev msg   id: %d   chan_msk: %d   pre: %d   post: %d   delayCS: %d   delaySS: %d", id, imsg->dev.chan_msk, imsg->dev.pre, imsg->dev.post, imsg->dev.delayCS, imsg->dev.delaySS);
-	msg->o.io.err = -EIO;
+	TRACE("dev msg   id: %d   chan_msk: %d   pre: %d   post: %d   delayCS: %d   delaySS: %d", id, imsg->dev.chan_msk, imsg->dev.pre, imsg->dev.post, imsg->dev.delayCS, imsg->dev.delaySS);
 
+	msg->o.io.err = -EIO;
 	mutexLock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 	if (ecspi_init(imsg->id, imsg->dev.chan_msk) < 0) {
 		mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
@@ -120,10 +124,10 @@ TRACE("dev msg   id: %d   chan_msk: %d   pre: %d   post: %d   delayCS: %d   dela
 	}
 	mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 	
-	ecspisrv_dev_common[ID_TO_INDEX(imsg->id)].devEnabled = 1;
+	ecspisrv_dev_common[ID_TO_INDEX(id)].devEnabled = 1;
 
 	msg->o.io.err = EOK;
-TRACE("dev cfg successful");
+	TRACE("dev cfg successful");
 	return 0;
 } 
 
@@ -132,9 +136,10 @@ static int configureChan(msg_t *msg)
 {
 	spi_i_devctl_t *imsg;
 	int id;
+
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
-TRACE("chan cfg msg   id: %d   chan: %d   mode: %d", imsg->id, imsg->chan.chan, imsg->chan.mode);
+	TRACE("chan cfg msg   id: %d   chan: %d   mode: %d", imsg->id, imsg->chan.chan, imsg->chan.mode);
 	
 	mutexLock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 	if (ecspi_setMode(imsg->id, imsg->chan.chan, imsg->chan.mode) < 0) {
@@ -145,7 +150,7 @@ TRACE("chan cfg msg   id: %d   chan: %d   mode: %d", imsg->id, imsg->chan.chan, 
 	mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 
 	msg->o.io.err = EOK;
-TRACE("chan cfg successful");
+	TRACE("chan cfg successful");
 	return 0;
 } 
 
@@ -154,21 +159,21 @@ static int selectChan(msg_t *msg)
 {
 	spi_i_devctl_t *imsg;
 	int id;
+
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
-
-TRACE("chan select msg   id: %d   chan: %d", imsg->id, imsg->chan.chan);
+	TRACE("chan select msg   id: %d   chan: %d", imsg->id, imsg->chan.chan);
 
 	mutexLock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 	if (ecspi_setChannel(imsg->id, imsg->chan.chan) < 0) {
-		msg->o.io.err = -1;
+		msg->o.io.err = -EIO;
 		mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 		return -1;
 	}
 	mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 
 	msg->o.io.err = EOK;
-TRACE("chan select successful");
+	TRACE("chan select successful");
 	return 0;
 } 
 
@@ -177,9 +182,10 @@ static int exchange(msg_t *msg)
 {
 	spi_i_devctl_t *imsg;
 	int id;
+	uint8_t data[BURSTSZ];
+
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
-	uint8_t data[BURSTSZ];
 
 	mutexLock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 	if (!ecspisrv_dev_common[ID_TO_INDEX(imsg->id)].devEnabled) {
@@ -188,10 +194,9 @@ static int exchange(msg_t *msg)
 		return -1;
 	}
 
-TRACE("exchange msg   id: %d   len: %d\n"
-"	data from client: %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
+	TRACE("exchange msg   id: %d   len: %d\n	data from client: %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
 	if (imsg->type == spi_exchange) {
-TRACE("BLOCKING");
+		TRACE("BLOCKING");
 		if (ecspi_exchange(imsg->id, msg->i.data, data, msg->i.size) < 0) {
 			msg->o.io.err = -EIO;
 			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
@@ -199,7 +204,7 @@ TRACE("BLOCKING");
 		}
 	}
 	else {
-TRACE("BUSY");
+		TRACE("BUSY");
 		if (ecspi_exchangeBusy(imsg->id, msg->i.data, data, msg->i.size)< 0) {
 			msg->o.io.err = -EIO;
 			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
@@ -210,7 +215,8 @@ TRACE("BUSY");
 	
 	msg->o.data = data;
 	msg->o.size = msg->i.size;
-TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *((uint8_t *)msg->o.data + 1), *((uint8_t *)msg->o.data + 2));
+	msg->o.io.err = EOK;
+	TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *((uint8_t *)msg->o.data + 1), *((uint8_t *)msg->o.data + 2));
 	return 0;
 } 
 
@@ -218,20 +224,24 @@ TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *(
 static void regContext(int id)
 {
 	int i;
+
 	i = ID_TO_INDEX(id);
-TRACE("First use of async communication for dev_no: %d. Registering context..", id);
+
+	TRACE("First use of async communication for dev_no: %d. Registering context..", id);
 	condCreate(&ecspisrv_dev_common[i].cond);
 	ecspi_registerContext(id, &ecspisrv_dev_common[i].ctx, ecspisrv_dev_common[i].cond);
 	ecspisrv_dev_common[i].contextRdy = 1;
-TRACE("context registered   cond: %d, dev_no in ctx: %d", ecspisrv_dev_common[i].cond, ecspisrv_dev_common[i].ctx.dev_no);
+
+	TRACE("context registered   cond: %d, dev_no in ctx: %d", ecspisrv_dev_common[i].cond, ecspisrv_dev_common[i].ctx.dev_no);
 	return;
 }
 
 
 static int wrtieExchangeAsync(msg_t *msg)
 {
-	int id;
 	spi_i_devctl_t *imsg;
+	int id;
+	int ret;
 
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
@@ -241,12 +251,30 @@ static int wrtieExchangeAsync(msg_t *msg)
 		regContext(id);
 
 	if (imsg->type == spi_writeAsync) {
-TRACE("writeAsync msg   id: %d   len: %d   data(first 3 bytes): %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
-		ecspi_writeAsync(&ecspisrv_dev_common[ID_TO_INDEX(id)].ctx, msg->i.data, msg->i.size);
+		TRACE("writeAsync msg   id: %d   len: %d   data(first 3 bytes): %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
+		if ((ret = ecspi_writeAsync(&ecspisrv_dev_common[ID_TO_INDEX(id)].ctx, msg->i.data, msg->i.size)) < 0) {
+			msg->o.io.err = -EIO;
+			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
+			return -1;
+		}
+		if (ret == 0) {
+			msg->o.io.err = -EAGAIN;
+			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
+			return -1;
+		}
 	}
 	else {
-TRACE("exchangeAsync msg   id: %d   len: %d   data(first 3 bytes): %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
-		ecspi_exchangeAsync(&ecspisrv_dev_common[ID_TO_INDEX(id)].ctx, msg->i.data, msg->i.size);
+		TRACE("exchangeAsync msg   id: %d   len: %d   data(first 3 bytes): %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
+		if ((ret = ecspi_exchangeAsync(&ecspisrv_dev_common[ID_TO_INDEX(id)].ctx, msg->i.data, msg->i.size)) < 0) {
+			msg->o.io.err = -EIO;
+			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
+			return -1;
+		}
+		if (ret == 0) {
+			msg->o.io.err = -EAGAIN;
+			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
+			return -1;
+		}
 	}
 	mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 
@@ -254,45 +282,49 @@ TRACE("exchangeAsync msg   id: %d   len: %d   data(first 3 bytes): %x %x %x", im
 	return 0;
 }
 
+
 static int readAsync(msg_t *msg)
 {
+	spi_i_devctl_t *imsg;
 	int id;
 	int retries;
-	spi_i_devctl_t *imsg;
+	int i;
 	uint8_t data[BURSTSZ];
 
-	retries = 0;
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
-TRACE("readAsync msg   id: %d   len: %d", id, msg->i.size);
+	retries = 0;
+	i = ID_TO_INDEX(id);
+	TRACE("readAsync msg   id: %d   len: %d", id, msg->i.size);
 
-	mutexLock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
-	if (!ecspisrv_dev_common[ID_TO_INDEX(id)].contextRdy) {
+	mutexLock(ecspisrv_dev_common[i].irqLock);
+	if (!ecspisrv_dev_common[i].contextRdy) {
 		LOG_ERROR("context not registered");
 		msg->o.io.err = -ECONNREFUSED;
-		mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
+		mutexUnlock(ecspisrv_dev_common[i].irqLock);
 		return -1;
 	}
-printf("ecspisrv_dev_common[ID_TO_INDEX(id)].ctx.rx_count: %d\n", ecspisrv_dev_common[ID_TO_INDEX(id)].ctx.rx_count);
-printf("msg->i.size: %d\n", msg->i.size);
-printf("ecspisrv_dev_common[ID_TO_INDEX(id)].ctx.rx_count < msg->i.size: %d\n", (ecspisrv_dev_common[ID_TO_INDEX(id)].ctx.rx_count < msg->i.size));
-printf("(retries < RETRIES_MAX): %d\n", (retries < RETRIES_MAX));
-	while ( (ecspisrv_dev_common[ID_TO_INDEX(id)].ctx.rx_count < msg->i.size) && (retries < RETRIES_MAX)) {
-		condWait(ecspisrv_dev_common[ID_TO_INDEX(id)].cond, ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock, 5);
-		TRACE("readAsync: retry %d", retries);
+	while ( (ecspisrv_dev_common[i].ctx.rx_count < msg->i.size) && (retries < RETRIES_MAX)) {
+		condWait(ecspisrv_dev_common[i].cond, ecspisrv_dev_common[i].irqLock, 5);
 		++retries;
+		TRACE("readAsync: retry %d", retries);
 	}
+	if (ecspi_readFifo(&ecspisrv_dev_common[i].ctx, data, msg->i.size) < 0) {
+		msg->o.io.err = -EIO;
+		mutexUnlock(ecspisrv_dev_common[i].irqLock);
+		return -1;
+	}
+	mutexUnlock(ecspisrv_dev_common[i].irqLock);
 
-	ecspi_readFifo(&ecspisrv_dev_common[ID_TO_INDEX(id)].ctx, data, msg->i.size);
-	mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 	msg->o.data = data;
 	msg->o.size = msg->i.size;
-TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *((uint8_t *)msg->o.data + 1), *((uint8_t *)msg->o.data + 2));
-
-	msg->o.io.err = EOK;
+	TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *((uint8_t *)msg->o.data + 1), *((uint8_t *)msg->o.data + 2));
 	if(retries == RETRIES_MAX){
 		LOG_ERROR("readAsync: read failed");
 		msg->o.io.err = -EIO;	
+	}
+	else {
+		msg->o.io.err = EOK;
 	}
 	return 0;
 }
@@ -301,6 +333,7 @@ TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *(
 static int processMsg(msg_t *msg)
 {
 	spi_i_devctl_t *imsg;
+
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	
 	switch (imsg->type) {
@@ -339,11 +372,12 @@ static void dispatchMsg(int i)
 {
     unsigned int rid;
     msg_t msg;
-TRACE("dispatch msg thread no %d", i);
+
+	TRACE("dispatch msg thread no %d", i);
     while (1) {
 		while (msgRecv(ecspisrv_common.ecspi_port, &msg, &rid) < 0)
 			;
-TRACE("msg recv by thread %d", i);
+		TRACE("msg recv by thread %d", i);
 		switch (msg.type) {
 			case mtDevCtl:
 				processMsg(&msg);
@@ -377,18 +411,18 @@ int main(int argc, char **argv)
 {
 	int i;
 
-TRACE("starting");
-printf("Kompilacja sie udala 44\n");
+	TRACE("starting");
+	printf("Kompilacja sie udala 45\n");
 	for (i = 0; i < 4; ++i)
 		mutexCreate(&ecspisrv_dev_common[i].irqLock);
 
     portCreate(&ecspisrv_common.ecspi_port);
     if (createDevFiles() < 0) {
-		LOG_ERROR("creating spi files failed");
+		LOG_ERROR("creating spi files failed. Server stopped");
 		return -1;
 	}
 	
-	for (i = 1; i < SPI_THREADS_NO - 1; ++i) /* for some reason it doesnt work when i = 0 */
+	for (i = 1; i < SPI_THREADS_NO - 1; ++i) /* for some reason it doesnt work when i = 0, so one thread less now */
 		beginthread(dispatchMsg, THREADS_PRIORITY, ecspisrv_common.stack[i], STACKSZ, i);
 
 	dispatchMsg(i);
