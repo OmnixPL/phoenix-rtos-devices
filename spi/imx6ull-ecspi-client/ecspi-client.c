@@ -176,6 +176,25 @@ printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 }
 
 
+int readAsyncTest2(oid_t oid)
+{   
+    spi_i_devctl_t exchange;
+
+    exchange.id = oid.id;
+    exchange.type = spi_readAsync;
+    msg.i.size = 4;
+
+    msg.type = mtDevCtl;
+    memcpy(msg.i.raw, (unsigned char*)&exchange, sizeof(exchange));
+
+printf("ec: Reading data ASYNC. Sending...\n");
+    msgSend(oid.port, &msg);
+printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
+
+    return 0;
+}
+
+
 int main(int argc, char **argv)
 {
 /* CONNECTING TO SERVER */
@@ -210,6 +229,7 @@ int main(int argc, char **argv)
     writeAsyncTest(oid);
     exchangeAsyncTest(oid);
     readAsyncTest(oid);
+    readAsyncTest2(oid);
 
     lookup("/dev/spi2", NULL, &oid);
     printf("ec: lookup successful: port: %d, id: %llu\n", oid.port, oid.id);
