@@ -5,166 +5,171 @@
 
 #include "../imx6ull-server/ecspi-server.h"
 
+#define MODULE_NAME "ecspi-client"
+#define LOG_ERROR(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
+#define TRACE(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": trace: " str "\n", ##__VA_ARGS__); } while (0)
+
 msg_t msg;
 
-static int devCtlTest(unsigned int port)
+static int devCtlTest(oid_t oid)
 {
-    dev_ctl_msg_t raw;
+    spi_i_devctl_t imsg;
 
-    raw.dev_no = 1;
-    raw.chan_msk = 3;
-    raw.pre = 4;
-    raw.post = 6;
-    raw.delayCS = 11;
-    raw.delaySS = 13;
+    imsg.id = oid.id;
+    imsg.type = spi_devCtl;
+    imsg.dev.chan_msk = 3;
+    imsg.dev.pre = 7;
+    imsg.dev.post = 6;
+    imsg.dev.delayCS = 11;
+    imsg.dev.delaySS = 13;
 
 	msg.type = mtDevCtl;
-    memcpy(msg.i.raw, (unsigned char*)&raw, sizeof(raw));
+    memcpy(msg.i.raw, (unsigned char*)&imsg, sizeof(imsg));
 
-printf("ec: Initalizing device. Sending...\n");
-printf("Port: %d, &msg: %p\n", port, &msg);
-    msgSend(port, &msg);
+TRACE("initalizing device");
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
-int chanCtlTest(unsigned int port)
+int chanCtlTest(oid_t oid)
 {  
-    chan_ctl_msg_t chan;
+    spi_i_devctl_t imsg;
 
-    chan.dev_no = 1;
-    chan.chan = 1;
-    chan.mode = 1;
+    imsg.id = oid.id;
+    imsg.type = spi_chanCtl;
+    imsg.chan.chan = 1;
+    imsg.chan.mode = 1;
     
-    msg.type = mtChanCtl;
-    memcpy(msg.i.raw, (unsigned char*)&chan, sizeof(chan));
+    msg.type = mtDevCtl;
+    memcpy(msg.i.raw, (unsigned char*)&imsg, sizeof(imsg));
 
 
 printf("ec: Setting mode. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
 
-int chanSelectTest(unsigned int port)
+int chanSelectTest(oid_t oid)
 {   
-    msg_t msg;
-    chan_ctl_msg_t chan;
+    spi_i_devctl_t imsg;
 
-    chan.dev_no = 1;
-    chan.chan = 1;
+    imsg.id = oid.id;
+    imsg.type = spi_chanSelect;
+    imsg.chan.chan = 1;
 
-    msg.type = mtChanSelect;
-    memcpy(msg.i.raw, (unsigned char*)&chan, sizeof(chan));
+    msg.type = mtDevCtl;
+    memcpy(msg.i.raw, (unsigned char*)&imsg, sizeof(imsg));
 
 printf("ec: Selecting channel. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
 
-int exchangeDataBlockingTest(unsigned int port)
+int exchangeDataBlockingTest(oid_t oid)
 {   
-    msg_t msg;
-    exchange_msg_t exchange;
+    spi_i_devctl_t exchange;
     uint8_t data[3] = {0xAE, 0x12, 0x34};
 
-    exchange.dev_no = 1;
-    exchange.len = 3;
-    memcpy(exchange.data, data, 3);
+    exchange.id = oid.id;
+    exchange.type = spi_exchange;
+    msg.i.data = data;
+    msg.i.size = 3;
 
-    msg.type = mtExchange;
+    msg.type = mtDevCtl;
     memcpy(msg.i.raw, (unsigned char*)&exchange, sizeof(exchange));
 
 printf("ec: Exchanging data BLOCKING. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
 
-int exchangeDataBusyTest(unsigned int port)
+int exchangeDataBusyTest(oid_t oid)
 {   
-    msg_t msg;
-    exchange_msg_t exchange;
+    spi_i_devctl_t exchange;
     uint8_t data[3] = {0x13, 0x57, 0x91};
 
-    exchange.dev_no = 1;
-    exchange.len = 3;
-    memcpy(exchange.data, data, 3);
+    exchange.id = oid.id;
+    exchange.type = spi_exchangeBusy;
+    msg.i.data = data;
+    msg.i.size = 3;
 
-    msg.type = mtExchangeBusy;
+    msg.type = mtDevCtl;
     memcpy(msg.i.raw, (unsigned char*)&exchange, sizeof(exchange));
 
 printf("ec: Exchanging data BUSY. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
 
-int writeAsyncTest(unsigned int port)
+int writeAsyncTest(oid_t oid)
 {   
-    msg_t msg;
-    exchange_msg_t exchange;
-    uint8_t data[3] = {0x13, 0x57, 0x91};
+    spi_i_devctl_t exchange;
+    uint8_t data[3] = {0x66, 0x55, 0xAA};
+    
+    exchange.id = oid.id;
+    exchange.type = spi_writeAsync;
+    msg.i.data = data;
+    msg.i.size = 3;
 
-    exchange.dev_no = 1;
-    exchange.len = 3;
-    memcpy(exchange.data, data, 3);
-
-    msg.type = mtWriteAsync;
+    msg.type = mtDevCtl;
     memcpy(msg.i.raw, (unsigned char*)&exchange, sizeof(exchange));
 
 printf("ec: Writing data ASYNC. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
 
-int exchangeAsyncTest(unsigned int port)
+int exchangeAsyncTest(oid_t oid)
 {   
-    msg_t msg;
-    exchange_msg_t exchange;
+    spi_i_devctl_t exchange;
     uint8_t data[3] = {0x13, 0x57, 0x91};
 
-    exchange.dev_no = 1;
-    exchange.len = 3;
-    memcpy(exchange.data, data, 3);
+    exchange.id = oid.id;
+    exchange.type = spi_exchangeAsync;
+    msg.i.data = data;
+    msg.i.size = 3;
 
-    msg.type = mtExchangeAsync;
+    msg.type = mtDevCtl;
     memcpy(msg.i.raw, (unsigned char*)&exchange, sizeof(exchange));
 
 printf("ec: Exchanging data ASYNC. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
 }
 
 
-int readAsyncTest(unsigned int port)
+int readAsyncTest(oid_t oid)
 {   
-    msg_t msg;
-    exchange_msg_t exchange;
+    spi_i_devctl_t exchange;
 
-    exchange.dev_no = 1;
-    exchange.len = 3;
+    exchange.id = oid.id;
+    exchange.type = spi_readAsync;
+    msg.i.size = 3;
 
-    msg.type = mtReadAsync;
+    msg.type = mtDevCtl;
     memcpy(msg.i.raw, (unsigned char*)&exchange, sizeof(exchange));
 
 printf("ec: Reading data ASYNC. Sending...\n");
-    msgSend(port, &msg);
+    msgSend(oid.port, &msg);
 printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 
     return 0;
@@ -174,40 +179,41 @@ printf("ec: Returning error code: >%d<\n\n", msg.o.io.err);
 int main(int argc, char **argv)
 {
 /* CONNECTING TO SERVER */
-    oid_t dir;
+    oid_t oid;
     int lookup_tries = 0;
     printf("ecspi-client (ec)\n");
-    printf("KOMPILACJA KLIENTA: 6\n");
+    printf("KOMPILACJA KLIENTA: 9\n");
     while(lookup_tries < 1000)
     {   
-        if (lookup("/dev/spi1", NULL, &dir) < 0)
+        if (lookup("/dev/spi1", NULL, &oid) < 0)
         {
             printf("ec: lookup failed: %d\n", lookup_tries);
             ++lookup_tries;
         }
         else
         {
-            printf("ec: lookup successful: port: %d, id: %llu\n", dir.port, dir.id);
+            printf("ec: lookup successful: port: %d, id: %llu\n", oid.port, oid.id);
             break;
         }
     }
     if (lookup_tries == 1000)
         return -1;
 
-    devCtlTest(dir.port);
-    chanCtlTest(dir.port);
-    chanSelectTest(dir.port);
-    
-    exchangeDataBlockingTest(dir.port);
-    exchangeDataBusyTest(dir.port);
+    devCtlTest(oid);
+    chanCtlTest(oid);
+    chanSelectTest(oid);
 
-    readAsyncTest(dir.port);
-    writeAsyncTest(dir.port);
-    exchangeAsyncTest(dir.port);
-    readAsyncTest(dir.port);
-    lookup("/dev/spi2", NULL, &dir);
-    printf("ec: lookup successful: port: %d, id: %llu\n", dir.port, dir.id);
-    chanSelectTest(dir.port);
+    exchangeDataBlockingTest(oid);
+    exchangeDataBusyTest(oid);
+
+    readAsyncTest(oid);
+    writeAsyncTest(oid);
+    exchangeAsyncTest(oid);
+    readAsyncTest(oid);
+
+    lookup("/dev/spi2", NULL, &oid);
+    printf("ec: lookup successful: port: %d, id: %llu\n", oid.port, oid.id);
+    chanSelectTest(oid);
 
 
     return 0;
