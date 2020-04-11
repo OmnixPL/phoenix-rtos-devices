@@ -2,9 +2,9 @@ typedef struct {
 	int id;
 
 	enum {
-		spi_devCtl, spi_chanCtl, spi_chanSelect,
-		spi_exchange, spi_exchangeBusy,
-		spi_readAsync, spi_writeAsync, spi_exchangeAsync
+		spi_dev_ctl, spi_chan_ctl, spi_chan_select,
+		spi_exchange_blocking, spi_exchange_busy,
+		spi_read_async, spi_write_async, spi_exchange_async
 	} type;
 	
 	union {

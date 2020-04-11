@@ -16,7 +16,7 @@
 #define ID_TO_INDEX(x) (x-1)
 
 #define THREADS_PRIORITY 2
-#define STACKSZ 512
+#define STACKSZ 4096
 #define SPI_THREADS_NO 4
 
 #define BURSTSZ 256
@@ -182,7 +182,6 @@ static int exchange(msg_t *msg)
 {
 	spi_i_devctl_t *imsg;
 	int id;
-	uint8_t data[BURSTSZ];
 
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
@@ -195,9 +194,9 @@ static int exchange(msg_t *msg)
 	}
 
 	TRACE("exchange msg   id: %d   len: %d\n	data from client: %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
-	if (imsg->type == spi_exchange) {
+	if (imsg->type == spi_exchange_blocking) {
 		TRACE("BLOCKING");
-		if (ecspi_exchange(imsg->id, msg->i.data, data, msg->i.size) < 0) {
+		if (ecspi_exchange(imsg->id, msg->i.data, msg->o.data, msg->i.size) < 0) {
 			msg->o.io.err = -EIO;
 			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 			return -1;
@@ -205,16 +204,13 @@ static int exchange(msg_t *msg)
 	}
 	else {
 		TRACE("BUSY");
-		if (ecspi_exchangeBusy(imsg->id, msg->i.data, data, msg->i.size)< 0) {
+		if (ecspi_exchangeBusy(imsg->id, msg->i.data, msg->o.data, msg->i.size)< 0) {
 			msg->o.io.err = -EIO;
 			mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
 			return -1;
 		}
 	}
 	mutexUnlock(ecspisrv_dev_common[ID_TO_INDEX(id)].irqLock);
-	
-	msg->o.data = data;
-	msg->o.size = msg->i.size;
 	msg->o.io.err = EOK;
 	TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *((uint8_t *)msg->o.data + 1), *((uint8_t *)msg->o.data + 2));
 	return 0;
@@ -250,7 +246,7 @@ static int wrtieExchangeAsync(msg_t *msg)
 	if (!ecspisrv_dev_common[ID_TO_INDEX(id)].contextRdy)
 		regContext(id);
 
-	if (imsg->type == spi_writeAsync) {
+	if (imsg->type == spi_write_async) {
 		TRACE("writeAsync msg   id: %d   len: %d   data(first 3 bytes): %x %x %x", imsg->id, msg->i.size, *(uint8_t *)msg->i.data, *((uint8_t *)msg->i.data + 1), *((uint8_t *)msg->i.data + 2));
 		if ((ret = ecspi_writeAsync(&ecspisrv_dev_common[ID_TO_INDEX(id)].ctx, msg->i.data, msg->i.size)) < 0) {
 			msg->o.io.err = -EIO;
@@ -289,13 +285,12 @@ static int readAsync(msg_t *msg)
 	int id;
 	int retries;
 	int i;
-	uint8_t data[BURSTSZ];
 
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	id = imsg->id;
 	retries = 0;
 	i = ID_TO_INDEX(id);
-	TRACE("readAsync msg   id: %d   len: %d", id, msg->i.size);
+	TRACE("readAsync msg   id: %d   len: %d", id, msg->o.size);
 
 	mutexLock(ecspisrv_dev_common[i].irqLock);
 	if (!ecspisrv_dev_common[i].contextRdy) {
@@ -304,20 +299,18 @@ static int readAsync(msg_t *msg)
 		mutexUnlock(ecspisrv_dev_common[i].irqLock);
 		return -1;
 	}
-	while ( (ecspisrv_dev_common[i].ctx.rx_count < msg->i.size) && (retries < RETRIES_MAX)) {
+	while ( (ecspisrv_dev_common[i].ctx.rx_count < msg->o.size) && (retries < RETRIES_MAX)) {
 		condWait(ecspisrv_dev_common[i].cond, ecspisrv_dev_common[i].irqLock, 5);
 		++retries;
 		TRACE("readAsync: retry %d", retries);
 	}
-	if (ecspi_readFifo(&ecspisrv_dev_common[i].ctx, data, msg->i.size) < 0) {
+	if (ecspi_readFifo(&ecspisrv_dev_common[i].ctx, msg->o.data, msg->o.size) < 0) {
 		msg->o.io.err = -EIO;
 		mutexUnlock(ecspisrv_dev_common[i].irqLock);
 		return -1;
 	}
 	mutexUnlock(ecspisrv_dev_common[i].irqLock);
 
-	msg->o.data = data;
-	msg->o.size = msg->i.size;
 	TRACE("data from ecspi (first 3 bytes): %x %x %x", *((uint8_t *)msg->o.data), *((uint8_t *)msg->o.data + 1), *((uint8_t *)msg->o.data + 2));
 	if(retries == RETRIES_MAX){
 		LOG_ERROR("readAsync: read failed");
@@ -337,29 +330,29 @@ static int processMsg(msg_t *msg)
 	imsg = (spi_i_devctl_t *)msg->i.raw;
 	
 	switch (imsg->type) {
-		case spi_devCtl:
+		case spi_dev_ctl:
 			configureDev(msg);
 			break;
 
-		case spi_chanCtl:
+		case spi_chan_ctl:
 			configureChan(msg);
 			break;
 
-		case spi_chanSelect:
+		case spi_chan_select:
 			selectChan(msg);
 			break;
 
-		case spi_exchange:
-		case spi_exchangeBusy:
+		case spi_exchange_blocking:
+		case spi_exchange_busy:
 			exchange(msg);
 			break;
 
-		case spi_readAsync:
+		case spi_read_async:
 			readAsync(msg);
 			break;
 			
-		case spi_exchangeAsync:
-		case spi_writeAsync:
+		case spi_exchange_async:
+		case spi_write_async:
 			wrtieExchangeAsync(msg);
 			break;
 	}
@@ -368,16 +361,16 @@ static int processMsg(msg_t *msg)
 }
 
 
-static void dispatchMsg(int i)
+static void dispatchMsg(void *i)
 {
     unsigned int rid;
     msg_t msg;
 
-	TRACE("dispatch msg thread no %d", i);
+	TRACE("dispatch msg thread no %d", (int)i);
     while (1) {
 		while (msgRecv(ecspisrv_common.ecspi_port, &msg, &rid) < 0)
 			;
-		TRACE("msg recv by thread %d", i);
+		TRACE("msg recv by thread %d", (int)i);
 		switch (msg.type) {
 			case mtDevCtl:
 				processMsg(&msg);
@@ -422,10 +415,10 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	
-	for (i = 1; i < SPI_THREADS_NO - 1; ++i) /* for some reason it doesnt work when i = 0, so one thread less now */
-		beginthread(dispatchMsg, THREADS_PRIORITY, ecspisrv_common.stack[i], STACKSZ, i);
+	for (i = 0; i < SPI_THREADS_NO - 1; ++i) /* for some reason it doesnt work when i = 0, so one thread less now */
+		beginthread(dispatchMsg, THREADS_PRIORITY, ecspisrv_common.stack[i], STACKSZ, (void *)i);
 
-	dispatchMsg(i);
+	dispatchMsg((void *)i);
 
     return 0;
 }
