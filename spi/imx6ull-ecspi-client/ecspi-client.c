@@ -36,7 +36,6 @@ int main(int argc, char **argv)
     spi_devInit(&spi4, 1, 0, 2, 0, 0);
     spi_chanCtl(&spi4, 1, 3);
     spi_chanSelect(&spi4, 0);
-printf("TEST2\n\n\n\n\n\n\n\n\n");
     out[0] = READ + WHO_AM_I;
     spi_exchange(&spi4, spi_exchange_busy, out, in, CFG_MSG);
     TRACE("Device should answer ff 49: %x %x", in[0], in[1]);
