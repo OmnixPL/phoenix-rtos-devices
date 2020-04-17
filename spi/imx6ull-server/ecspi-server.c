@@ -11,7 +11,7 @@
 
 #define MODULE_NAME "ecspi-server"
 #define LOG_ERROR(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
-#define TRACE(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": trace: " str "\n", ##__VA_ARGS__); } while (0)
+#define TRACE(str, ...) do { if (0) fprintf(stdout, MODULE_NAME ": trace: " str "\n", ##__VA_ARGS__); } while (0)
 
 #define ID_TO_INDEX(x) (x-1)
 
