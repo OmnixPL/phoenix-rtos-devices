@@ -1,4 +1,4 @@
-$(PREFIX_PROG)imx6ull-ecspi-client: $(addprefix $(PREFIX_O)spi/imx6ull-ecspi-client/, ecspi-client.o) $(PREFIX_A)libspisrv.a
+$(PREFIX_PROG)imx6ull-ecspi-client: $(addprefix $(PREFIX_O)spi/imx6ull-ecspi-client/, ecspi-client.o) $(addprefix $(PREFIX_O)spi/imx6ull-ecspi-client/, spi-wrapper.o)
 	$(LINK)
 
 all: $(PREFIX_PROG_STRIPPED)imx6ull-ecspi-client

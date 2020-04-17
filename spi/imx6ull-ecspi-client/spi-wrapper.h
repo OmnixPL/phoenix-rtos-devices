@@ -1,3 +1,5 @@
+#include <ecspi-server.h>
+
 int spi_openDev(oid_t *oid, int dev_no);
 int spi_devInit(oid_t *oid, uint8_t chan_msk, uint8_t pre, uint8_t post, uint8_t delayCS, uint16_t delaySS);
 int spi_chanCtl(oid_t *oid, uint8_t chan, uint8_t mode);

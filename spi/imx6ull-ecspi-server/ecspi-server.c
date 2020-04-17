@@ -10,7 +10,7 @@
 #include "ecspi-server.h"
 
 #define MODULE_NAME "ecspi-server"
-#define LOG_ERROR(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
+#define LOG_ERROR(str, ...) do { if (1) fprintf(stderr, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
 #define TRACE(str, ...) do { if (0) fprintf(stdout, MODULE_NAME ": trace: " str "\n", ##__VA_ARGS__); } while (0)
 
 #define ID_TO_INDEX(x) (x-1)
@@ -405,7 +405,7 @@ int main(int argc, char **argv)
 	int i;
 
 	TRACE("starting");
-	printf("Kompilacja sie udala 45\n");
+	
 	for (i = 0; i < 4; ++i)
 		mutexCreate(&ecspisrv_dev_common[i].irqLock);
 
@@ -415,7 +415,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	
-	for (i = 0; i < SPI_THREADS_NO - 1; ++i) /* for some reason it doesnt work when i = 0, so one thread less now */
+	for (i = 0; i < SPI_THREADS_NO - 1; ++i)
 		beginthread(dispatchMsg, THREADS_PRIORITY, ecspisrv_common.stack[i], STACKSZ, (void *)i);
 
 	dispatchMsg((void *)i);

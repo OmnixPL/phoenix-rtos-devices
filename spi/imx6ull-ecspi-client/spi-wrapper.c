@@ -3,12 +3,11 @@
 #include <string.h>
 #include <sys/msg.h>
 
-#include "ecspi-server.h"
+#include "spi-wrapper.h"
 
-#define MODULE_NAME "libspisrv"
-#define LOG_ERROR(str, ...) do { if (1) fprintf(stdout, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
+#define MODULE_NAME "spi-wrapper"
+#define LOG_ERROR(str, ...) do { if (1) fprintf(stderr, MODULE_NAME ": ERROR: " str "\n", ##__VA_ARGS__); } while (0)
 #define TRACE(str, ...) do { if (0) fprintf(stdout, MODULE_NAME ": trace: " str "\n", ##__VA_ARGS__); } while (0)
-
 
 
 int spi_openDev(oid_t *oid, int dev_no)
@@ -106,7 +105,6 @@ int spi_exchange(oid_t *oid, uint8_t type, uint8_t *out, uint8_t *in, int len)
     
     TRACE("*in: %x %x %x", in[0], in[1], in[2]);
     msgSend(oid->port, &msg);
-    memcpy(in, msg.o.data, len);
     TRACE("*in: %x %x %x", in[0], in[1], in[2]);
     return 0;
 }
@@ -133,6 +131,7 @@ int spi_exchangeAsync(oid_t *oid, uint8_t type, uint8_t *out, int len)
     msgSend(oid->port, &msg);
     return 0;
 }
+
 
 int spi_readAsync(oid_t *oid, uint8_t *in, int len)
 {   
